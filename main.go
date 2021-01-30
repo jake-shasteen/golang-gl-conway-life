@@ -11,13 +11,18 @@ import (
 )
 
 const (
+	NUM_BYTES_IN_32_BIT = 4
 	width              = 640
 	height             = 480
 	vertexShaderSource = `
     #version 410
+
+    uniform float u_time;
+
     in vec3 vp;
     void main() {
-        gl_Position = vec4(vp, 1.0);
+    		float pct = abs(sin(u_time));
+        gl_Position = vec4(vp, pct);
     }
 ` + "\x00"
 
@@ -54,10 +59,12 @@ var (
 	}
 )
 
-func main() {
+func init() {
 	// "ensures we will always execute in the same operating system thread"
 	runtime.LockOSThread()
+}
 
+func main() {
 	if err := glfw.Init(); err != nil {
 		panic(err)
 	}
@@ -101,34 +108,39 @@ func main() {
 	start := time.Now()
 
 	vao := makeVao(triangle)
+
 	for !window.ShouldClose() {
 		gl.Uniform1f(gl.GetUniformLocation(prog, gl.Str("u_time\x00")), float32(time.Since(start).Seconds()))
-		draw(vao, window, prog)
+		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+		gl.UseProgram(prog)
+
+		gl.BindVertexArray(vao)
+		gl.DrawArrays(gl.LINE_LOOP, 0, int32(len(triangle)/3))
+
+		glfw.PollEvents()
+		window.SwapBuffers()
 	}
 
 }
 
-func draw(vao uint32, window *glfw.Window, program uint32) {
-	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-	gl.UseProgram(program)
-
-	gl.BindVertexArray(vao)
-	gl.DrawArrays(gl.TRIANGLES, 0, int32(len(triangle)/3))
-
-	glfw.PollEvents()
-	window.SwapBuffers()
-}
-
 // makeVao initializes and returns a vertex array from the points provided.
 func makeVao(points []float32) uint32 {
-	var vbo uint32
+	var vbo uint32 // is this actually an address?
 	gl.GenBuffers(1, &vbo)
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
-	gl.BufferData(gl.ARRAY_BUFFER, 4*len(points), gl.Ptr(points), gl.STATIC_DRAW)
+	gl.BufferData(gl.ARRAY_BUFFER, NUM_BYTES_IN_32_BIT*len(points), gl.Ptr(points), gl.STATIC_DRAW)
 
 	var vao uint32
-	gl.GenVertexArrays(1, &vao)
-	gl.BindVertexArray(vao)
+	gl.GenVertexArrays(1, &vao) // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glGenVertexArrays.xhtml
+	gl.BindVertexArray(vao) // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glBindVertexArray.xhtml
+
+	// As best I can tell, GenVertexArrays registers a vertex array object with a 'name'
+	// which is the value of our vao variable -- printing out the value here gives 1.
+	// BindVertexArray takes in an "array name" -- perhaps under the hood, GenVertexArrays is
+	// creating some space in heap memory that we can't access directly, and giving us back an
+	// "address" of 1, and BindVertexArray is 
+
 	gl.EnableVertexAttribArray(0)
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 0, nil)
