@@ -7,21 +7,23 @@ import (
 	"log"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
+	updatesPerSecond    = 10
 	NUM_BYTES_IN_32_BIT = 4
-	width              = 640
-	height             = 480
-	vertexShaderSource = `
+	width               = 640
+	height              = 480
+	vertexShaderSource  = `
     #version 410
 
     uniform float u_time;
 
     in vec3 vp;
     void main() {
-    		float pct = abs(sin(u_time));
+    		float pct = 0.9 + abs(sin(u_time / 2.0) / 10.0);
         gl_Position = vec4(vp, pct);
     }
 ` + "\x00"
@@ -52,12 +54,12 @@ const (
 )
 
 var (
-	right = []float32 {
+	right = []float32{
 		-0.5, 0.5, 0,
 		-0.5, -0.5, 0,
 		0.5, -0.5, 0,
 	}
-	square = []float32 {
+	square = []float32{
 		-0.5, 0.5, 0,
 		-0.5, -0.5, 0,
 		0.5, -0.5, 0,
@@ -78,6 +80,7 @@ func init() {
 }
 
 func main() {
+	var mu sync.Mutex
 	if err := glfw.Init(); err != nil {
 		panic(err)
 	}
@@ -122,19 +125,36 @@ func main() {
 
 	cells := makeCells()
 
+	go func() {
+		for !window.ShouldClose() {
+			t := time.Now()
+
+			mu.Lock()
+			for x := range cells {
+				for _, c := range cells[x] {
+					c.checkState(cells)
+				}
+			}
+			mu.Unlock()
+
+			time.Sleep(time.Second/time.Duration(updatesPerSecond) - time.Since(t))
+		}
+	}()
+
 	for !window.ShouldClose() {
 		gl.Uniform1f(gl.GetUniformLocation(prog, gl.Str("u_time\x00")), float32(time.Since(start).Seconds()))
+
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 		gl.UseProgram(prog)
 
+		mu.Lock()
 		for x := range cells {
 			for _, c := range cells[x] {
 				c.draw()
 			}
 		}
-
-
+		mu.Unlock()
 
 		glfw.PollEvents()
 		window.SwapBuffers()
@@ -151,13 +171,13 @@ func makeVao(points []float32) uint32 {
 
 	var vao uint32
 	gl.GenVertexArrays(1, &vao) // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glGenVertexArrays.xhtml
-	gl.BindVertexArray(vao) // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glBindVertexArray.xhtml
+	gl.BindVertexArray(vao)     // https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glBindVertexArray.xhtml
 
 	// As best I can tell, GenVertexArrays registers a vertex array object with a 'name'
 	// which is the value of our vao variable -- printing out the value here gives 1.
 	// BindVertexArray takes in an "array name" -- perhaps under the hood, GenVertexArrays is
 	// creating some space in heap memory that we can't access directly, and giving us back an
-	// "address" of 1, and BindVertexArray is 
+	// "address" of 1, and BindVertexArray is
 
 	gl.EnableVertexAttribArray(0)
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
@@ -189,8 +209,10 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 	return shader, nil
 }
 
-
 func (c *cell) draw() {
-		gl.BindVertexArray(c.drawable)
-		gl.DrawArrays(gl.LINE_LOOP, 0, int32(len(square)/3))
+	if !c.alive {
+		return
+	}
+	gl.BindVertexArray(c.drawable)
+	gl.DrawArrays(gl.LINE_LOOP, 0, int32(len(square)/3))
 }
