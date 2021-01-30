@@ -40,9 +40,11 @@ const (
     out vec4 FragColor;
 
     void main() {
+    		vec2 st = gl_FragCoord.xy/u_resolution;
+
         vec3 color = vec3(0.0);
 
-        float pct = abs(sin(u_time));
+        float pct = (abs(sin(u_time)) + distance(st, vec2(1.0))) / 2;
 
         // Mix uses pct (a value from 0-1) to
         // mix the two colors
@@ -143,6 +145,7 @@ func main() {
 
 	for !window.ShouldClose() {
 		gl.Uniform1f(gl.GetUniformLocation(prog, gl.Str("u_time\x00")), float32(time.Since(start).Seconds()))
+		gl.Uniform2f(gl.GetUniformLocation(prog, gl.Str("u_resolution\x00")), width, height)
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
