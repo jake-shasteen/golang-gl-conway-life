@@ -52,7 +52,20 @@ const (
 )
 
 var (
-	triangle = []float32{
+	right = []float32 {
+		-0.5, 0.5, 0,
+		-0.5, -0.5, 0,
+		0.5, -0.5, 0,
+	}
+	square = []float32 {
+		-0.5, 0.5, 0,
+		-0.5, -0.5, 0,
+		0.5, -0.5, 0,
+		-0.5, 0.5, 0,
+		0.5, 0.5, 0,
+		0.5, -0.5, 0,
+	}
+	isoceles = []float32{
 		0, 0.5, 0, // top
 		-0.5, -0.5, 0, // left
 		0.5, -0.5, 0, // right
@@ -107,7 +120,7 @@ func main() {
 
 	start := time.Now()
 
-	vao := makeVao(triangle)
+	cells := makeCells()
 
 	for !window.ShouldClose() {
 		gl.Uniform1f(gl.GetUniformLocation(prog, gl.Str("u_time\x00")), float32(time.Since(start).Seconds()))
@@ -115,8 +128,13 @@ func main() {
 
 		gl.UseProgram(prog)
 
-		gl.BindVertexArray(vao)
-		gl.DrawArrays(gl.LINE_LOOP, 0, int32(len(triangle)/3))
+		for x := range cells {
+			for _, c := range cells[x] {
+				c.draw()
+			}
+		}
+
+
 
 		glfw.PollEvents()
 		window.SwapBuffers()
@@ -169,4 +187,10 @@ func compileShader(source string, shaderType uint32) (uint32, error) {
 	}
 
 	return shader, nil
+}
+
+
+func (c *cell) draw() {
+		gl.BindVertexArray(c.drawable)
+		gl.DrawArrays(gl.LINE_LOOP, 0, int32(len(square)/3))
 }
